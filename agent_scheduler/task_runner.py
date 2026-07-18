@@ -404,13 +404,22 @@ class TaskRunner:
 
                 self.__saved_images_path = []
             else:
-                time.sleep(2)
+                # 等待当前 WebUI 任务完成
+                for _ in range(20):  # 最多等 ~2 秒
+                    if progress.current_task is None:
+                        break
+                    time.sleep(0.1)
                 continue
 
+            # 在 while True: 里面，任务执行完后的部分
             task = get_next_task()
             if not task:
                 if not self.paused:
-                    time.sleep(1)
+                    time.sleep(0.5)   # 从 1 改成 0.5 或更小
+                    # 再主动检查一次
+                    task = get_next_task()
+                    if task:
+                        continue
                     self.__on_completed()
                 break
 
@@ -419,9 +428,17 @@ class TaskRunner:
             log.info("[AgentScheduler] Runner is paused")
             return
 
-        if self.is_executing_task:
-            log.info("[AgentScheduler] Runner already started")
+        # 即使线程在运行，也检查一下是否有 pending task（防止边界情况）
+        pending_task = self.__get_pending_task()
+        if not pending_task:
             return
+
+        if self.is_executing_task:
+            log.debug("[AgentScheduler] Runner already running, but new pending tasks exist")
+            # 可以在这里加个 wake-up 信号（可选，但下面加 sleep 改动更重要）
+            return
+
+        # ... 原有的启动线程代码 ...
 
         pending_task = self.__get_pending_task()
         if pending_task:
@@ -502,6 +519,19 @@ class TaskRunner:
         if self.paused:
             log.info("[AgentScheduler] Runner is paused")
             return None
+
+        # # delete task that are too old
+        # retention_days = 30
+        # if (
+        #     getattr(shared.opts, "queue_history_retention_days", None)
+        #     and shared.opts.queue_history_retention_days in task_history_retenion_map
+        # ):
+        #     retention_days = task_history_retenion_map[shared.opts.queue_history_retention_days]
+
+        # if retention_days > 0:
+        #     deleted_rows = task_manager.delete_tasks(before=datetime.now() - timedelta(days=retention_days))
+        #     if deleted_rows > 0:
+        #         log.debug(f"[AgentScheduler] Deleted {deleted_rows} tasks older than {retention_days} days")
 
         self.__total_pending_tasks = task_manager.count_tasks(status="pending")
 
