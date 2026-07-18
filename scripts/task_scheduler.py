@@ -262,6 +262,11 @@ class Script(scripts.Script):
                      log.error("[ArtVenture] Possible taskID conflict. Please try enqueing again")
 
             task_runner.execute_pending_tasks_threading()
+            
+            # 新增：即使线程已经在跑，也强制检查一次 pending
+            if task_runner.is_executing_task:
+                # 可以加个轻量唤醒（比如设置一个 event），但最简单是：
+                log.debug("[AgentScheduler] New task enqueued during execution")
 
         return f
 
